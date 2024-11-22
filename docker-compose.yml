@@ -1,0 +1,76 @@
+version: '3.6'
+
+services:
+
+  postgres:
+    image: postgres:16.4
+    container_name: postgres
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - ${DB_PORT}:5432
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_DB: ${DB_DATABASE}
+    networks:
+      - static
+
+  app:
+    build:
+      args:
+        user: worker
+        uid: 1000
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: app
+    restart: unless-stopped
+    volumes:
+      - ./backend:/var/www
+      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/php.ini
+    networks:
+      - static
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  webserver:
+    image: nginx:alpine
+    container_name: webserver
+    restart: unless-stopped
+    ports:
+      - 80:80
+    depends_on:
+      - app
+      - postgres
+    volumes:
+      - ./frontend:/var/frontend:delegated
+      - ./backend:/var/www:delegated
+      - ./docker/nginx/conf.d/:/etc/nginx/conf.d/
+    networks:
+      - static
+
+  npm:
+    container_name: npm
+    build:
+      context: ./
+      dockerfile: docker/node/Dockerfile
+      args:
+        - UID=${UID:-1000}
+        - GID=${GID:-1000}
+    volumes:
+      - ./frontend:/app
+      - node_modules:/app/node_modules
+    networks:
+      - static
+
+
+networks:
+  static:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  node_modules:
+    driver: local
